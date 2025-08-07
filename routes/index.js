@@ -1,8 +1,9 @@
 
-const express = require('express');
-const router = express.Router();
+  const express = require('express');
+  const router = express.Router();
 
-const usersRoutes = require('./usersRoutes');
-router.use('/users', usersRoutes);
+  const studentRoutes = require('./studentRoutes');
+  router.use('/student', studentRoutes);
 
-module.exports = router;
+  module.exports = router;
+  

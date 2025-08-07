@@ -2,6 +2,8 @@ const express = require("express");
 const app = express();
 const swaggerJsdoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
+const router = require("./routes/index"); // update this if your file is elsewhere
+const { globalSchemas } = require("./utils/swaggerSchemas");
 
 // Middleware
 app.use(express.json());
@@ -17,11 +19,25 @@ const swaggerSpec = swaggerJsdoc({
     },
     servers: [
       {
-        url: "http://localhost:3000", // 👈 this should be inside 'definition'
+        url: "http://localhost:3001", // 👈 this should be inside 'definition'
       },
     ],
   },
-  apis: ["./routes/*.js", "./swagger-components/*.yaml"], // paths to your route + component files
+  apis: ["./routes/*.js", "./app.js"], // paths to your route + component files
+
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+      },
+    },
+    
+    schemas: {
+      ...globalSchemas,
+    },
+  }
 });
 
 // Serve Swagger docs at /api-docs
@@ -32,12 +48,11 @@ app.get("/", (req, res) => {
   res.send("✅ Server is running. Visit /api-docs for Swagger UI.");
 });
 
-// Route imports
-const router = require("./routes/index"); // update this if your file is elsewhere
+
 app.use("/api", router); // your CRUD routes accessible at /api/resource
 
 // Start server
-const PORT = 3000;
+const PORT = 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });

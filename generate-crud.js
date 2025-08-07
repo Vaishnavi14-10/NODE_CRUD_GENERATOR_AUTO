@@ -43,63 +43,72 @@ const swaggerTypeMap = {
 };
 
 const generateSwaggerSchema = (tableName, columns) => {
+  const schemaName = capitalize(tableName);
+
+  const requiredFields = Object.keys(columns)
+    .map((key) => `        - ${key}`)
+    .join("\n");
+
   const properties = Object.entries(columns)
     .map(
       ([key, type]) =>
-        `      ${key}: {\n        type: "${swaggerTypeMap[type] || "string"}"\n      }`
+        `        ${key}:\n          type: ${JSON.stringify(
+          swaggerTypeMap[type] || "string"
+        )}`
     )
-    .join(",\n");
+    .join("\n");
 
   return `
-/**
- * @swagger
- * components:
- *   schemas:
- *     ${capitalize(tableName)}:
- *       type: object
- *       required: [${Object.keys(columns).join(", ")}]
- *       properties:
-${properties}
- */
-`;
+  /**
+   *@swagger
+  *components:
+  *  schemas:
+  *    ${schemaName}:
+  *      type: object
+  *      required:
+            ${requiredFields}
+  *      properties:
+            ${properties}
+  */
+  `;
 };
 
 const generateMigration = (tableName, columns) => {
   const fields = Object.entries(columns)
     .map(
       ([name, type]) => `      ${name}: {
-        type: Sequelize.${type},
-        allowNull: false
-      }`
+          type: Sequelize.${type},
+          allowNull: false
+        }`
     )
     .join(",\n");
 
   return `
-'use strict';
-module.exports = {
-  async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('${tableName}', {
-      id: {
-        allowNull: false,
-        autoIncrement: true,
-        primaryKey: true,
-        type: Sequelize.INTEGER
-      },
-${fields},
-      createdAt: {
-        allowNull: false,
-        type: Sequelize.DATE
-      },
-      updatedAt: {
-        allowNull: false,
-        type: Sequelize.DATE
-      }
-    });
-  },
-  async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('${tableName}');
-  }
-};`;
+  'use strict';
+  module.exports = {
+    async up(queryInterface, Sequelize) {
+      await queryInterface.createTable('${tableName}', {
+        id: {
+          allowNull: false,
+          autoIncrement: true,
+          primaryKey: true,
+          type: Sequelize.INTEGER
+        },
+  ${fields},
+        createdAt: {
+          allowNull: false,
+          type: Sequelize.DATE
+        },
+        updatedAt: {
+          allowNull: false,
+          type: Sequelize.DATE
+        }
+      });
+    },
+    async down(queryInterface, Sequelize) {
+      await queryInterface.dropTable('${tableName}');
+    }
+  };`;
 };
 
 const generateModel = (tableName, columns) => {
@@ -108,69 +117,68 @@ const generateModel = (tableName, columns) => {
     .join(",\n    ");
 
   return `
-'use strict';
-module.exports = (sequelize, DataTypes) => {
-  const ${capitalize(tableName)} = sequelize.define('${tableName}', {
-    ${fields}
-  }, {});
-  return ${capitalize(tableName)};
-};`;
+  'use strict';
+  module.exports = (sequelize, DataTypes) => {
+    const ${capitalize(tableName)} = sequelize.define('${tableName}', {
+      ${fields}
+    }, {});
+    return ${capitalize(tableName)};
+  };`;
 };
 
 const generateModelsIndex = () => {
   const content = `
-'use strict';
+  'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const Sequelize = require('sequelize');
-const basename = path.basename(__filename);
-const env = process.env.NODE_ENV || 'development';
-const config = require(__dirname + '/../config/config.js')[env];
-const db = {};
+  const fs = require('fs');
+  const path = require('path');
+  const Sequelize = require('sequelize');
+  const basename = path.basename(__filename);
+  const env = process.env.NODE_ENV || 'development';
+  const config = require(__dirname + '/../config/config.js')[env];
+  const db = {};
 
-let sequelize;
-if (config.use_env_variable) {
-  sequelize = new Sequelize(process.env[config.use_env_variable], config);
-} else {
-  sequelize = new Sequelize(config.database, config.username, config.password, config);
-}
+  let sequelize;
+  if (config.use_env_variable) {
+    sequelize = new Sequelize(process.env[config.use_env_variable], config);
+  } else {
+    sequelize = new Sequelize(config.database, config.username, config.password, config);
+  }
 
-fs
-  .readdirSync(__dirname)
-  .filter(file => {
-    return (
-      file.indexOf('.') !== 0 &&
-      file !== basename &&
-      file.slice(-3) === '.js'
-    );
-  })
-  .forEach(file => {
-    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
-    db[model.name] = model;
+  fs
+    .readdirSync(__dirname)
+    .filter(file => {
+      return (
+        file.indexOf('.') !== 0 &&
+        file !== basename &&
+        file.slice(-3) === '.js'
+      );
+    })
+    .forEach(file => {
+      const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
+      db[model.name] = model;
+    });
+
+  Object.keys(db).forEach(modelName => {
+    if (db[modelName].associate) {
+      db[modelName].associate(db);
+    }
   });
 
-Object.keys(db).forEach(modelName => {
-  if (db[modelName].associate) {
-    db[modelName].associate(db);
-  }
-});
+  db.sequelize = sequelize;
+  db.Sequelize = Sequelize;
 
-db.sequelize = sequelize;
-db.Sequelize = Sequelize;
+  module.exports = db;
+  `;
 
-module.exports = db;
-`;
-
-  const modelsDir = path.join(__dirname, 'models');
-  const indexFile = path.join(modelsDir, 'index.js');
+  const modelsDir = path.join(__dirname, "models");
+  const indexFile = path.join(modelsDir, "index.js");
 
   if (!fs.existsSync(indexFile)) {
     fs.writeFileSync(indexFile, content);
-    console.log('✅ Generated models/index.js');
+    console.log("✅ Generated models/index.js");
   }
 };
-
 
 const generateValidation = (columns) => {
   const rules = Object.keys(columns)
@@ -178,170 +186,170 @@ const generateValidation = (columns) => {
     .join(",\n");
 
   return `
-const yup = require('yup');
+  const yup = require('yup');
 
-const schema = yup.object({
-${rules}
-});
+  const schema = yup.object({
+  ${rules}
+  });
 
-module.exports = schema;
-`;
+  module.exports = schema;
+  `;
 };
 
 const generateController = (tableName) => {
   return `
-const db = require('../models');
-const schema = require('../validations/${tableName}');
-const ${capitalize(tableName)} = db['${tableName}'];
+  const db = require('../models');
+  const schema = require('../validations/${tableName}');
+  const ${capitalize(tableName)} = db['${tableName}'];
 
-module.exports = {
-  async create(req, res) {
-    try {
-      await schema.validate(req.body);
-      const item = await ${capitalize(tableName)}.create(req.body);
-      res.status(201).json(item);
-    } catch (err) {
-      res.status(400).json({ error: err.message });
+  module.exports = {
+    async create(req, res) {
+      try {
+        await schema.validate(req.body);
+        const item = await ${capitalize(tableName)}.create(req.body);
+        res.status(201).json(item);
+      } catch (err) {
+        res.status(400).json({ error: err.message });
+      }
+    },
+
+    async findAll(req, res) {
+      const data = await ${capitalize(tableName)}.findAll();
+      res.json(data);
+    },
+
+    async findOne(req, res) {
+      const data = await ${capitalize(tableName)}.findByPk(req.params.id);
+      if (!data) return res.status(404).json({ error: "Not found" });
+      res.json(data);
+    },
+
+    async update(req, res) {
+      try {
+        await schema.validate(req.body);
+        await ${capitalize(tableName)}.update(req.body, {
+          where: { id: req.params.id }
+        });
+        res.json({ message: "Updated" });
+      } catch (err) {
+        res.status(400).json({ error: err.message });
+      }
+    },
+
+    async delete(req, res) {
+      await ${capitalize(tableName)}.destroy({ where: { id: req.params.id } });
+      res.json({ message: "Deleted" });
     }
-  },
-
-  async findAll(req, res) {
-    const data = await ${capitalize(tableName)}.findAll();
-    res.json(data);
-  },
-
-  async findOne(req, res) {
-    const data = await ${capitalize(tableName)}.findByPk(req.params.id);
-    if (!data) return res.status(404).json({ error: "Not found" });
-    res.json(data);
-  },
-
-  async update(req, res) {
-    try {
-      await schema.validate(req.body);
-      await ${capitalize(tableName)}.update(req.body, {
-        where: { id: req.params.id }
-      });
-      res.json({ message: "Updated" });
-    } catch (err) {
-      res.status(400).json({ error: err.message });
-    }
-  },
-
-  async delete(req, res) {
-    await ${capitalize(tableName)}.destroy({ where: { id: req.params.id } });
-    res.json({ message: "Deleted" });
-  }
-};
-`;
+  };
+  `;
 };
 
 const generateRoute = (tableName, columns) => {
   const schemaBlock = generateSwaggerSchema(tableName, columns);
   return `${schemaBlock}
 
-const express = require('express');
-const router = express.Router();
-const controller = require('../controllers/${tableName}');
+  const express = require('express');
+  const router = express.Router();
+  const controller = require('../controllers/${tableName}');
 
-/**
- * @swagger
- * /${tableName}:
- *   post:
- *     tags: [${capitalize(tableName)}]
- *     summary: Create a new ${tableName}
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/${capitalize(tableName)}'
- *     responses:
- *       201:
- *         description: Created
- *       400:
- *         description: Validation error
- */
-router.post('/', controller.create);
+  /**
+   * @swagger
+   * /${tableName}:
+   *   post:
+   *     tags: [${capitalize(tableName)}]
+   *     summary: Create a new ${tableName}
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/${capitalize(tableName)}'
+   *     responses:
+   *       201:
+   *         description: Created
+   *       400:
+   *         description: Validation error
+   */
+  router.post('/', controller.create);
 
-/**
- * @swagger
- * /${tableName}:
- *   get:
- *     tags: [${capitalize(tableName)}]
- *     summary: Get all ${tableName}
- *     responses:
- *       200:
- *         description: Success
- */
-router.get('/', controller.findAll);
+  /**
+   * @swagger
+   * /${tableName}:
+   *   get:
+   *     tags: [${capitalize(tableName)}]
+   *     summary: Get all ${tableName}
+   *     responses:
+   *       200:
+   *         description: Success
+   */
+  router.get('/', controller.findAll);
 
-/**
- * @swagger
- * /${tableName}/{id}:
- *   get:
- *     tags: [${capitalize(tableName)}]
- *     summary: Get ${tableName} by ID
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Found
- *       404:
- *         description: Not found
- */
-router.get('/:id', controller.findOne);
+  /**
+   * @swagger
+   * /${tableName}/{id}:
+   *   get:
+   *     tags: [${capitalize(tableName)}]
+   *     summary: Get ${tableName} by ID
+   *     parameters:
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Found
+   *       404:
+   *         description: Not found
+   */
+  router.get('/:id', controller.findOne);
 
-/**
- * @swagger
- * /${tableName}/{id}:
- *   put:
- *     tags: [${capitalize(tableName)}]
- *     summary: Update ${tableName}
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema:
- *           type: integer
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/${capitalize(tableName)}'
- *     responses:
- *       200:
- *         description: Updated
- *       400:
- *         description: Validation error
- */
-router.put('/:id', controller.update);
+  /**
+   * @swagger
+   * /${tableName}/{id}:
+   *   put:
+   *     tags: [${capitalize(tableName)}]
+   *     summary: Update ${tableName}
+   *     parameters:
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/${capitalize(tableName)}'
+   *     responses:
+   *       200:
+   *         description: Updated
+   *       400:
+   *         description: Validation error
+   */
+  router.put('/:id', controller.update);
 
-/**
- * @swagger
- * /${tableName}/{id}:
- *   delete:
- *     tags: [${capitalize(tableName)}]
- *     summary: Delete ${tableName}
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Deleted
- */
-router.delete('/:id', controller.delete);
+  /**
+   * @swagger
+   * /${tableName}/{id}:
+   *   delete:
+   *     tags: [${capitalize(tableName)}]
+   *     summary: Delete ${tableName}
+   *     parameters:
+   *       - name: id
+   *         in: path
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Deleted
+   */
+  router.delete('/:id', controller.delete);
 
-module.exports = router;
-`;
+  module.exports = router;
+  `;
 };
 
 const updateRouteIndex = (tableName) => {
@@ -370,14 +378,14 @@ const updateRouteIndex = (tableName) => {
     fs.writeFileSync(indexPath, content);
   } else {
     content = `
-const express = require('express');
-const router = express.Router();
+  const express = require('express');
+  const router = express.Router();
 
-${importLine}
-${useLine}
+  ${importLine}
+  ${useLine}
 
-module.exports = router;
-`;
+  module.exports = router;
+  `;
     fs.writeFileSync(indexPath, content);
   }
 };
@@ -393,6 +401,35 @@ const checkFileExists = (filePath) => {
     throw new Error(`❌ File already exists: ${filePath}`);
   }
 };
+
+const writeGlobalSwaggerSchema = (tableName, columns) => {
+  const capitalizedName = capitalize(tableName);
+  const props = Object.entries(columns)
+    .map(([key, type]) => {
+      const swaggerType = swaggerTypeMap[type] || "string";
+      return `      ${key}: { type: '${swaggerType}' }`;
+    })
+    .join(",\n");
+
+  const schema = `export const globalSchemas = {
+  ${capitalizedName}: {
+    type: 'object',
+    required: [${Object.keys(columns)
+      .map((key) => `'${key}'`)
+      .join(", ")}],
+    properties: {
+${props}
+    },
+  },
+};
+`;
+
+  const filePath = path.join("utils", "swaggerSchemas.js");
+  ensureDir("utils");
+  fs.writeFileSync(filePath, schema);
+  console.log("✅ Swagger schema saved in utils/swaggerSchemas.js");
+};
+
 
 const run = async () => {
   const { tableName } = await inquirer.prompt([
@@ -437,9 +474,11 @@ const run = async () => {
   fs.writeFileSync(routeFile, generateRoute(tableName, columns));
   updateRouteIndex(tableName);
   generateModelsIndex();
+  writeGlobalSwaggerSchema(tableName, columns);
 
-
-  console.log(`✅ CRUD with Swagger for '${tableName}' generated successfully.`);
+  console.log(
+    `✅ CRUD with Swagger for '${tableName}' generated successfully.`
+  );
 };
 
 run();
